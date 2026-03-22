@@ -10,20 +10,12 @@ database:
   min_conns: 2
 
 ai:
-  provider: "minimax"  # minimax, openai, ollama, codex
-  minimax:
-    api_key: "${MINIMAX_API_KEY}"
-    base_url: "https://api.minimaxi.com/v1"  # OpenAI-compatible endpoint
-    model: "MiniMax-M2.7"  # Chat model (MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.)
-    embedding_model: "text-embedding-3-small"  # For embedding, use openai model or set to "" to skip
-    embedding_dim: 1536
-    max_tokens: 4096
-    temperature: 1.0
-    reasoning_split: false  # Enable interleaved thinking chain
+  provider: "codex"  # minimax, openai, ollama, codex
   codex:
     api_key: "${CODEX_API_KEY}"
-    base_url: "https://api.codex-for.me/v1"
-    model: "gpt-4.1-mini"
+    base_url: "http://127.0.0.1:15721/v1"
+    model: "gpt-5.4"
+    reasoning_effort: "high"
     embedding_model: "text-embedding-3-small"
     embedding_dim: 1536
   openai:

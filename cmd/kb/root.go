@@ -121,6 +121,7 @@ func resolvePipeline() (*core.Pipeline, error) {
 				cfg.AI.Codex.EmbeddingDim,
 				2048,
 				0.7,
+				cfg.AI.Codex.ReasoningEffort,
 			)
 		}
 	default:

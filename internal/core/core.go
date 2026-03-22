@@ -140,6 +140,7 @@ type CodexConfig struct {
 	Model          string `json:"model"`
 	EmbeddingModel string `json:"embedding_model"`
 	EmbeddingDim   int    `json:"embedding_dim"`
+	ReasoningEffort string `json:"reasoning_effort"` // high, medium, low (for Responses API)
 }
 
 type MinimaxConfig struct {
@@ -241,6 +242,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	cfg.AI.Codex.Model = v.GetString("ai.codex.model")
 	cfg.AI.Codex.EmbeddingModel = v.GetString("ai.codex.embedding_model")
 	cfg.AI.Codex.EmbeddingDim = v.GetInt("ai.codex.embedding_dim")
+	cfg.AI.Codex.ReasoningEffort = v.GetString("ai.codex.reasoning_effort")
 
 	cfg.App.Host = v.GetString("app.host")
 	cfg.App.Port = v.GetInt("app.port")
@@ -403,17 +405,17 @@ type MinimaxProvider struct {
 }
 
 type CodexProvider struct {
-	client         *goOpenAIClient
-	model          string
-	embedModel     string
-	embedDim       int
-	maxTokens      int
-	temp           float64
-	name           string
-	extraBodyModel string
+	client          *goOpenAIClient
+	model           string
+	embedModel      string
+	embedDim        int
+	maxTokens       int
+	temp            float64
+	name            string
+	reasoningEffort string
 }
 
-func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64) *CodexProvider {
+func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64, reasoningEffort string) *CodexProvider {
 	if baseURL == "" {
 		baseURL = "https://api.codex-for.me/v1"
 	}
@@ -436,25 +438,25 @@ func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTo
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	client := newGoOpenAIClient(apiKey, baseURL, model).WithHTTPClient(httpClient)
 	return &CodexProvider{
-		client:     client,
-		model:      model,
-		embedModel: embedModel,
-		embedDim:   embedDim,
-		maxTokens:  maxTokens,
-		temp:       temp,
-		name:       "codex",
+		client:          client,
+		model:           model,
+		embedModel:      embedModel,
+		embedDim:        embedDim,
+		maxTokens:       maxTokens,
+		temp:            temp,
+		name:            "codex",
+		reasoningEffort: reasoningEffort,
 	}
 }
 
 func (p *CodexProvider) Name() string { return p.name }
 
 type responsesCreateRequest struct {
-	Model     string `json:"model"`
-	Input     string `json:"input"`
-	MaxOutput int    `json:"max_output_tokens,omitempty"`
-	Temp      float64 `json:"temperature,omitempty"`
-	// Some OpenAI-compatible gateways route actual model via extra_body.model
-	ExtraBody map[string]any `json:"extra_body,omitempty"`
+	Model          string `json:"model"`
+	Input          string `json:"input"`
+	MaxOutput      int    `json:"max_output_tokens,omitempty"`
+	Temp           float64 `json:"temperature,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 type responsesCreateResponse struct {
@@ -474,13 +476,11 @@ type responsesCreateResponse struct {
 
 func (p *CodexProvider) createResponse(ctx context.Context, input string, maxOutput int, temp float64) (string, error) {
 	reqBody := responsesCreateRequest{
-		Model:     p.model,
-		Input:     input,
-		MaxOutput: maxOutput,
-		Temp:      temp,
-	}
-	if p.extraBodyModel != "" {
-		reqBody.ExtraBody = map[string]any{"model": p.extraBodyModel}
+		Model:          p.model,
+		Input:          input,
+		MaxOutput:      maxOutput,
+		Temp:           temp,
+		ReasoningEffort: p.reasoningEffort,
 	}
 	body, _ := json.Marshal(reqBody)
 
