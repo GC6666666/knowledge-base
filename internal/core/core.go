@@ -110,10 +110,10 @@ type SearchResult struct {
 
 type Config struct {
 	Database DatabaseConfig `json:"database"`
-	AI       AIConfig      `json:"ai"`
-	App      AppConfig     `json:"app"`
-	Ingest   IngestConfig  `json:"ingest"`
-	Watch    WatchConfig   `json:"watch"`
+	AI       AIConfig       `json:"ai"`
+	App      AppConfig      `json:"app"`
+	Ingest   IngestConfig   `json:"ingest"`
+	Watch    WatchConfig    `json:"watch"`
 }
 
 type DatabaseConfig struct {
@@ -127,28 +127,44 @@ type DatabaseConfig struct {
 }
 
 type AIConfig struct {
-	Provider string         `json:"provider"`
-	Minimax  MinimaxConfig  `json:"minimax,omitempty"`
-	OpenAI   OpenAIConfig   `json:"openai,omitempty"`
-	Ollama   OllamaConfig   `json:"ollama,omitempty"`
-	Codex    CodexConfig    `json:"codex,omitempty"`
+	Provider string                `json:"provider"`
+	Tasks    AITaskSelectionConfig `json:"tasks,omitempty"`
+	Minimax  MinimaxConfig         `json:"minimax,omitempty"`
+	OpenAI   OpenAIConfig          `json:"openai,omitempty"`
+	Ollama   OllamaConfig          `json:"ollama,omitempty"`
+	Codex    CodexConfig           `json:"codex,omitempty"`
+	Qwen     QwenConfig            `json:"qwen,omitempty"`
+}
+
+type AITaskSelectionConfig struct {
+	Summarize string `json:"summarize,omitempty"`
+	Classify  string `json:"classify,omitempty"`
+	Embed     string `json:"embed,omitempty"`
 }
 
 type CodexConfig struct {
+	APIKey          string `json:"api_key"`
+	BaseURL         string `json:"base_url"`
+	Model           string `json:"model"`
+	EmbeddingModel  string `json:"embedding_model"`
+	EmbeddingDim    int    `json:"embedding_dim"`
+	ReasoningEffort string `json:"reasoning_effort"` // high, medium, low (for Responses API)
+}
+
+type QwenConfig struct {
 	APIKey         string `json:"api_key"`
 	BaseURL        string `json:"base_url"`
 	Model          string `json:"model"`
 	EmbeddingModel string `json:"embedding_model"`
 	EmbeddingDim   int    `json:"embedding_dim"`
-	ReasoningEffort string `json:"reasoning_effort"` // high, medium, low (for Responses API)
 }
 
 type MinimaxConfig struct {
-	APIKey          string  `json:"api_key"`
-	BaseURL          string  `json:"base_url"`  // OpenAI-compatible endpoint, e.g. https://api.minimaxi.com/v1
-	GroupID         string  `json:"group_id"`
-	Model           string  `json:"model"`  // MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.
-	EmbeddingModel  string  `json:"embedding_model"`  // embo-01
+	APIKey         string  `json:"api_key"`
+	BaseURL        string  `json:"base_url"` // OpenAI-compatible endpoint, e.g. https://api.minimaxi.com/v1
+	GroupID        string  `json:"group_id"`
+	Model          string  `json:"model"`           // MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.
+	EmbeddingModel string  `json:"embedding_model"` // embo-01
 	EmbeddingDim   int     `json:"embedding_dim"`
 	MaxTokens      int     `json:"max_tokens"`
 	Temperature    float64 `json:"temperature"`
@@ -156,11 +172,11 @@ type MinimaxConfig struct {
 }
 
 type OpenAIConfig struct {
-	APIKey          string `json:"api_key"`
-	BaseURL          string `json:"base_url"`
-	Model           string `json:"model"`
-	EmbeddingModel  string `json:"embedding_model"`
-	EmbeddingDim    int    `json:"embedding_dim"`
+	APIKey         string `json:"api_key"`
+	BaseURL        string `json:"base_url"`
+	Model          string `json:"model"`
+	EmbeddingModel string `json:"embedding_model"`
+	EmbeddingDim   int    `json:"embedding_dim"`
 }
 
 type OllamaConfig struct {
@@ -222,6 +238,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	cfg.Database.MinConns = v.GetInt("database.min_conns")
 
 	cfg.AI.Provider = v.GetString("ai.provider")
+	cfg.AI.Tasks.Summarize = v.GetString("ai.tasks.summarize")
+	cfg.AI.Tasks.Classify = v.GetString("ai.tasks.classify")
+	cfg.AI.Tasks.Embed = v.GetString("ai.tasks.embed")
 	cfg.AI.Minimax.APIKey = v.GetString("ai.minimax.api_key")
 	cfg.AI.Minimax.BaseURL = v.GetString("ai.minimax.base_url")
 	cfg.AI.Minimax.GroupID = v.GetString("ai.minimax.group_id")
@@ -245,6 +264,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	cfg.AI.Codex.EmbeddingModel = v.GetString("ai.codex.embedding_model")
 	cfg.AI.Codex.EmbeddingDim = v.GetInt("ai.codex.embedding_dim")
 	cfg.AI.Codex.ReasoningEffort = v.GetString("ai.codex.reasoning_effort")
+	cfg.AI.Qwen.APIKey = v.GetString("ai.qwen.api_key")
+	cfg.AI.Qwen.BaseURL = v.GetString("ai.qwen.base_url")
+	cfg.AI.Qwen.Model = v.GetString("ai.qwen.model")
+	cfg.AI.Qwen.EmbeddingModel = v.GetString("ai.qwen.embedding_model")
+	cfg.AI.Qwen.EmbeddingDim = v.GetInt("ai.qwen.embedding_dim")
 
 	cfg.App.Host = v.GetString("app.host")
 	cfg.App.Port = v.GetInt("app.port")
@@ -273,8 +297,20 @@ func LoadConfig(configPath string) (*Config, error) {
 	if cfg.Database.MinConns == 0 {
 		cfg.Database.MinConns = 2
 	}
+	if cfg.AI.Provider == "" {
+		cfg.AI.Provider = "qwen"
+	}
+	if cfg.AI.Tasks.Summarize == "" {
+		cfg.AI.Tasks.Summarize = cfg.AI.Provider
+	}
+	if cfg.AI.Tasks.Classify == "" {
+		cfg.AI.Tasks.Classify = cfg.AI.Provider
+	}
+	if cfg.AI.Tasks.Embed == "" {
+		cfg.AI.Tasks.Embed = cfg.AI.Provider
+	}
 	if cfg.AI.Minimax.EmbeddingDim == 0 {
-		cfg.AI.Minimax.EmbeddingDim = 1024
+		cfg.AI.Minimax.EmbeddingDim = 1536
 	}
 	if cfg.AI.Minimax.MaxTokens == 0 {
 		cfg.AI.Minimax.MaxTokens = 4096
@@ -287,6 +323,18 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	if cfg.AI.Minimax.EmbeddingModel == "" {
 		cfg.AI.Minimax.EmbeddingModel = "embo01"
+	}
+	if cfg.AI.Qwen.BaseURL == "" {
+		cfg.AI.Qwen.BaseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	}
+	if cfg.AI.Qwen.Model == "" {
+		cfg.AI.Qwen.Model = "qwen-plus"
+	}
+	if cfg.AI.Qwen.EmbeddingModel == "" {
+		cfg.AI.Qwen.EmbeddingModel = "text-embedding-v4"
+	}
+	if cfg.AI.Qwen.EmbeddingDim == 0 {
+		cfg.AI.Qwen.EmbeddingDim = 1536
 	}
 	if cfg.AI.Codex.BaseURL == "" {
 		cfg.AI.Codex.BaseURL = "https://api.codex-for.me/v1"
@@ -327,6 +375,9 @@ func (c *Config) resolveEnv() {
 	c.Database.Password = resolveEnvOrValue(os.Getenv("KB_DB_PASSWORD"), c.Database.Password)
 	c.Database.Name = resolveEnvOrValue(os.Getenv("KB_DB_NAME"), c.Database.Name)
 	c.AI.Provider = resolveEnvOrValue(os.Getenv("KB_AI_PROVIDER"), c.AI.Provider)
+	c.AI.Tasks.Summarize = resolveEnvOrValue(os.Getenv("KB_AI_SUMMARIZE_PROVIDER"), c.AI.Tasks.Summarize)
+	c.AI.Tasks.Classify = resolveEnvOrValue(os.Getenv("KB_AI_CLASSIFY_PROVIDER"), c.AI.Tasks.Classify)
+	c.AI.Tasks.Embed = resolveEnvOrValue(os.Getenv("KB_AI_EMBED_PROVIDER"), c.AI.Tasks.Embed)
 	c.AI.Minimax.APIKey = resolveEnvOrValue(os.Getenv("MINIMAX_API_KEY"), c.AI.Minimax.APIKey)
 	c.AI.Minimax.BaseURL = resolveEnvOrValue(os.Getenv("MINIMAX_BASE_URL"), c.AI.Minimax.BaseURL)
 	c.AI.Minimax.GroupID = resolveEnvOrValue(os.Getenv("MINIMAX_GROUP_ID"), c.AI.Minimax.GroupID)
@@ -357,6 +408,14 @@ func (c *Config) resolveEnv() {
 	if v := os.Getenv("CODEX_EMBEDDING_DIM"); v != "" {
 		fmt.Sscanf(v, "%d", &c.AI.Codex.EmbeddingDim)
 	}
+	c.AI.Codex.ReasoningEffort = resolveEnvOrValue(os.Getenv("CODEX_REASONING_EFFORT"), c.AI.Codex.ReasoningEffort)
+	c.AI.Qwen.APIKey = resolveEnvOrValue(os.Getenv("DASHSCOPE_API_KEY"), c.AI.Qwen.APIKey)
+	c.AI.Qwen.BaseURL = resolveEnvOrValue(os.Getenv("QWEN_BASE_URL"), c.AI.Qwen.BaseURL)
+	c.AI.Qwen.Model = resolveEnvOrValue(os.Getenv("QWEN_MODEL"), c.AI.Qwen.Model)
+	c.AI.Qwen.EmbeddingModel = resolveEnvOrValue(os.Getenv("QWEN_EMBEDDING_MODEL"), c.AI.Qwen.EmbeddingModel)
+	if v := os.Getenv("QWEN_EMBEDDING_DIM"); v != "" {
+		fmt.Sscanf(v, "%d", &c.AI.Qwen.EmbeddingDim)
+	}
 	c.App.Host = resolveEnvOrValue(os.Getenv("KB_HOST"), c.App.Host)
 	if v := os.Getenv("KB_PORT"); v != "" {
 		fmt.Sscanf(v, "%d", &c.App.Port)
@@ -370,6 +429,81 @@ func resolveEnvOrValue(env, value string) string {
 		return env
 	}
 	return value
+}
+
+func BuildAITaskRuntime(cfg *Config) (aiTaskRuntime, error) {
+	providers := map[string]AIProvider{}
+
+	register := func(keys []string, provider AIProvider) {
+		for _, key := range keys {
+			providers[strings.ToLower(strings.TrimSpace(key))] = provider
+		}
+	}
+
+	if cfg.AI.Minimax.APIKey != "" {
+		register([]string{"minimax"}, NewMinimaxProvider(
+			cfg.AI.Minimax.APIKey,
+			cfg.AI.Minimax.BaseURL,
+			cfg.AI.Minimax.GroupID,
+			cfg.AI.Minimax.Model,
+			cfg.AI.Minimax.EmbeddingModel,
+			cfg.AI.Minimax.EmbeddingDim,
+			cfg.AI.Minimax.MaxTokens,
+			cfg.AI.Minimax.Temperature,
+		))
+	}
+	if cfg.AI.Codex.APIKey != "" {
+		register([]string{"codex", "codex-for.me", "codexforme"}, NewCodexProvider(
+			cfg.AI.Codex.APIKey,
+			cfg.AI.Codex.BaseURL,
+			cfg.AI.Codex.Model,
+			cfg.AI.Codex.EmbeddingModel,
+			cfg.AI.Codex.EmbeddingDim,
+			2048,
+			0.7,
+			cfg.AI.Codex.ReasoningEffort,
+		))
+	}
+	if cfg.AI.Qwen.APIKey != "" {
+		register([]string{"qwen", "dashscope"}, NewQwenProvider(
+			cfg.AI.Qwen.APIKey,
+			cfg.AI.Qwen.BaseURL,
+			cfg.AI.Qwen.Model,
+			cfg.AI.Qwen.EmbeddingModel,
+			cfg.AI.Qwen.EmbeddingDim,
+			2048,
+			0.7,
+		))
+	}
+
+	resolve := func(name string) (AIProvider, error) {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key == "" {
+			return nil, nil
+		}
+		provider, ok := providers[key]
+		if !ok {
+			return nil, fmt.Errorf("ai provider %q is not configured", name)
+		}
+		return provider, nil
+	}
+
+	summarizer, err := resolve(cfg.AI.Tasks.Summarize)
+	if err != nil {
+		return aiTaskRuntime{}, err
+	}
+	classifier, err := resolve(cfg.AI.Tasks.Classify)
+	if err != nil {
+		return aiTaskRuntime{}, err
+	}
+	embedder, err := resolve(cfg.AI.Tasks.Embed)
+	if err != nil {
+		return aiTaskRuntime{}, err
+	}
+	if embedder != nil && embedder.EmbeddingDimensions() > 0 && embedder.EmbeddingDimensions() != 1536 {
+		return aiTaskRuntime{}, fmt.Errorf("embed provider %q dimension %d does not match database vector dimension 1536", embedder.Name(), embedder.EmbeddingDimensions())
+	}
+	return aiTaskRuntime{summarizer: summarizer, classifier: classifier, embedder: embedder}, nil
 }
 
 func (c *DatabaseConfig) DSN() string {
@@ -395,6 +529,28 @@ type AIProvider interface {
 	Classify(ctx context.Context, text string) (*Classification, error)
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 	Name() string
+	ModelName() string
+	EmbeddingModelName() string
+	EmbeddingDimensions() int
+}
+
+type aiTaskRuntime struct {
+	summarizer AIProvider
+	classifier AIProvider
+	embedder   AIProvider
+}
+
+func (r aiTaskRuntime) any() AIProvider {
+	switch {
+	case r.embedder != nil:
+		return r.embedder
+	case r.summarizer != nil:
+		return r.summarizer
+	case r.classifier != nil:
+		return r.classifier
+	default:
+		return nil
+	}
 }
 
 type MinimaxProvider struct {
@@ -418,6 +574,16 @@ type CodexProvider struct {
 	temp            float64
 	name            string
 	reasoningEffort string
+}
+
+type QwenProvider struct {
+	client     *goOpenAIClient
+	model      string
+	embedModel string
+	embedDim   int
+	maxTokens  int
+	temp       float64
+	name       string
 }
 
 func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64, reasoningEffort string) *CodexProvider {
@@ -454,14 +620,177 @@ func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTo
 	}
 }
 
-func (p *CodexProvider) Name() string { return p.name }
+func NewQwenProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64) *QwenProvider {
+	if baseURL == "" {
+		baseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	}
+	if model == "" {
+		model = "qwen-plus"
+	}
+	if embedModel == "" {
+		embedModel = "text-embedding-v4"
+	}
+	if embedDim == 0 {
+		embedDim = 1536
+	}
+	if maxTokens == 0 {
+		maxTokens = 2048
+	}
+	if temp == 0 {
+		temp = 0.7
+	}
+
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	client := newGoOpenAIClient(apiKey, baseURL, model).WithHTTPClient(httpClient)
+	return &QwenProvider{
+		client:     client,
+		model:      model,
+		embedModel: embedModel,
+		embedDim:   embedDim,
+		maxTokens:  maxTokens,
+		temp:       temp,
+		name:       "qwen",
+	}
+}
+
+func (p *QwenProvider) Name() string               { return p.name }
+func (p *QwenProvider) ModelName() string          { return p.model }
+func (p *QwenProvider) EmbeddingModelName() string { return p.embedModel }
+func (p *QwenProvider) EmbeddingDimensions() int   { return p.embedDim }
+
+func (p *QwenProvider) Summarize(ctx context.Context, text string) (*Summary, error) {
+	if countTokens(text) > 3500 {
+		runes := []rune(text)
+		text = string(runes[:intMin(len(runes), 12000)])
+	}
+	prompt := strings.Replace(summarizationPrompt, "{{.Content}}", text, 1)
+	resp, err := p.client.CreateChatCompletion(ctx, p.model, ChatCompletionRequest{
+		Model: p.model,
+		Messages: []map[string]string{
+			{"role": "system", "content": "You are a helpful assistant. Always respond in JSON format."},
+			{"role": "user", "content": prompt},
+		},
+		MaxTokens:   p.maxTokens,
+		Temperature: p.temp,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("qwen chat: %w", err)
+	}
+
+	var result struct {
+		Summary   string   `json:"summary"`
+		KeyPoints []string `json:"key_points"`
+		Tags      []string `json:"tags"`
+	}
+	var reply string
+	if len(resp.Choices) > 0 {
+		reply = resp.Choices[0].Message.Content
+	}
+	jsonText, err := parseJSONResponse(reply)
+	if err != nil {
+		result.Summary = reply
+	} else if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+	return &Summary{
+		Summary:    result.Summary,
+		KeyPoints:  result.KeyPoints,
+		Tags:       result.Tags,
+		AIProvider: p.name,
+		Model:      p.model,
+		TokenCount: countTokens(text),
+	}, nil
+}
+
+func (p *QwenProvider) Classify(ctx context.Context, text string) (*Classification, error) {
+	if len(text) > 2000 {
+		runes := []rune(text)
+		text = string(runes[:2000])
+	}
+	prompt := strings.Replace(classificationPrompt, "{{.Content}}", text, 1)
+	resp, err := p.client.CreateChatCompletion(ctx, p.model, ChatCompletionRequest{
+		Model: p.model,
+		Messages: []map[string]string{
+			{"role": "system", "content": "You are a classification assistant. Respond in JSON format."},
+			{"role": "user", "content": prompt},
+		},
+		MaxTokens:   256,
+		Temperature: 0.3,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("qwen classify: %w", err)
+	}
+
+	var result struct {
+		Topic      string   `json:"topic"`
+		Tags       []string `json:"tags"`
+		Confidence float64  `json:"confidence"`
+	}
+	var reply string
+	if len(resp.Choices) > 0 {
+		reply = resp.Choices[0].Message.Content
+	}
+	jsonText, err := parseJSONResponse(reply)
+	if err != nil {
+		result.Topic = "未分类"
+		result.Tags = []string{}
+		result.Confidence = 0
+	} else if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+	if result.Confidence == 0 && result.Topic != "" {
+		result.Confidence = 0.8
+	}
+	return &Classification{
+		Topic:      result.Topic,
+		Tags:       result.Tags,
+		Confidence: result.Confidence,
+		AIProvider: p.name,
+		Model:      p.model,
+	}, nil
+}
+
+func (p *QwenProvider) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if len(texts) == 0 {
+		return nil, nil
+	}
+	truncated := make([]string, len(texts))
+	for i, t := range texts {
+		if countTokens(t) > 2000 {
+			runes := []rune(t)
+			truncated[i] = string(runes[:intMin(len(runes), 8000)])
+		} else {
+			truncated[i] = t
+		}
+	}
+	resp, err := p.client.CreateEmbeddings(ctx, EmbeddingRequest{
+		Input: truncated,
+		Model: p.embedModel,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("qwen embed: %w", err)
+	}
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("no embeddings returned")
+	}
+	result := make([][]float32, len(resp.Data))
+	for i, d := range resp.Data {
+		result[i] = d.Embedding
+	}
+	return result, nil
+}
+
+func (p *CodexProvider) Name() string               { return p.name }
+func (p *CodexProvider) ModelName() string          { return p.model }
+func (p *CodexProvider) EmbeddingModelName() string { return p.embedModel }
+func (p *CodexProvider) EmbeddingDimensions() int   { return p.embedDim }
 
 type responsesCreateRequest struct {
-	Model          string `json:"model"`
-	Input          string `json:"input"`
-	MaxOutput      int    `json:"max_output_tokens,omitempty"`
-	Temp           float64 `json:"temperature,omitempty"`
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	Model           string  `json:"model"`
+	Input           string  `json:"input"`
+	MaxOutput       int     `json:"max_output_tokens,omitempty"`
+	Temp            float64 `json:"temperature,omitempty"`
+	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
 }
 
 type responsesCreateResponse struct {
@@ -481,10 +810,10 @@ type responsesCreateResponse struct {
 
 func (p *CodexProvider) createResponse(ctx context.Context, input string, maxOutput int, temp float64) (string, error) {
 	reqBody := responsesCreateRequest{
-		Model:          p.model,
-		Input:          input,
-		MaxOutput:      maxOutput,
-		Temp:           temp,
+		Model:           p.model,
+		Input:           input,
+		MaxOutput:       maxOutput,
+		Temp:            temp,
 		ReasoningEffort: p.reasoningEffort,
 	}
 	body, _ := json.Marshal(reqBody)
@@ -551,8 +880,8 @@ func (p *CodexProvider) Summarize(ctx context.Context, text string) (*Summary, e
 
 	return &Summary{
 		Summary:    result.Summary,
-		KeyPoints: result.KeyPoints,
-		Tags:      result.Tags,
+		KeyPoints:  result.KeyPoints,
+		Tags:       result.Tags,
 		AIProvider: p.name,
 		Model:      p.model,
 		TokenCount: countTokens(text),
@@ -633,11 +962,11 @@ type LLMClient interface {
 
 // ChatCompletionRequest matches go-openai's request format.
 type ChatCompletionRequest struct {
-	Model       string                    `json:"model"`
-	Messages    []map[string]string        `json:"messages"`
-	MaxTokens   int                       `json:"max_tokens,omitempty"`
-	Temperature float64                   `json:"temperature,omitempty"`
-	ExtraBody  map[string]any             `json:"extra_body,omitempty"`
+	Model       string              `json:"model"`
+	Messages    []map[string]string `json:"messages"`
+	MaxTokens   int                 `json:"max_tokens,omitempty"`
+	Temperature float64             `json:"temperature,omitempty"`
+	ExtraBody   map[string]any      `json:"extra_body,omitempty"`
 }
 
 // ChatCompletionResponse matches go-openai's response format.
@@ -651,12 +980,12 @@ type ChatCompletionResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
-		Index int         `json:"index"`
+		Index        int    `json:"index"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens     int `json:"total_tokens"`
+		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 	Error struct {
 		Message string `json:"message"`
@@ -690,10 +1019,10 @@ type EmbeddingResponse struct {
 	Object string `json:"object"`
 	Data   []struct {
 		Object    string    `json:"object"`
-	Embedding []float32 `json:"embedding"`
-		Index    int       `json:"index"`
+		Embedding []float32 `json:"embedding"`
+		Index     int       `json:"index"`
 	} `json:"data"`
-	Model  string `json:"model"`
+	Model string `json:"model"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 	} `json:"usage"`
@@ -813,19 +1142,22 @@ func NewMinimaxProvider(apiKey, baseURL, groupID, model, embedModel string, embe
 
 	client := newGoOpenAIClient(apiKey, baseURL, model)
 	return &MinimaxProvider{
-		client:      client,
-		apiKey:      apiKey,
-		groupID:     groupID,
-		model:       model,
-		embedModel:  embedModel,
-		embedDim:    embedDim,
-		maxTokens:   maxTokens,
-		temp:        temp,
-		name:        "minimax",
+		client:     client,
+		apiKey:     apiKey,
+		groupID:    groupID,
+		model:      model,
+		embedModel: embedModel,
+		embedDim:   embedDim,
+		maxTokens:  maxTokens,
+		temp:       temp,
+		name:       "minimax",
 	}
 }
 
-func (p *MinimaxProvider) Name() string { return p.name }
+func (p *MinimaxProvider) Name() string               { return p.name }
+func (p *MinimaxProvider) ModelName() string          { return p.model }
+func (p *MinimaxProvider) EmbeddingModelName() string { return p.embedModel }
+func (p *MinimaxProvider) EmbeddingDimensions() int   { return p.embedDim }
 
 func (p *MinimaxProvider) Summarize(ctx context.Context, text string) (*Summary, error) {
 	if countTokens(text) > 3500 {
@@ -868,7 +1200,7 @@ func (p *MinimaxProvider) Summarize(ctx context.Context, text string) (*Summary,
 
 	return &Summary{
 		Summary:    result.Summary,
-		KeyPoints: result.KeyPoints,
+		KeyPoints:  result.KeyPoints,
 		Tags:       result.Tags,
 		AIProvider: p.name,
 		Model:      p.model,
@@ -1068,7 +1400,7 @@ func NewStore(ctx context.Context, dsn string, maxConns, minConns int) (*Store, 
 	return &Store{pool: pool}, nil
 }
 
-func (s *Store) Close()  { s.pool.Close() }
+func (s *Store) Close()                         { s.pool.Close() }
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
 func (s *Store) CreateMediaItem(ctx context.Context, item *MediaItem) error {
@@ -1148,15 +1480,15 @@ func (s *Store) ListMediaItems(ctx context.Context, mediaType, status string, li
 }
 
 func (s *Store) UpsertSummary(ctx context.Context, summary *Summary) error {
-	_, err := s.pool.Exec(ctx, `INSERT INTO summaries (id,media_id,summary,key_points,tags,ai_model,token_count) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (media_id) DO UPDATE SET summary=EXCLUDED.summary, key_points=EXCLUDED.key_points, tags=EXCLUDED.tags, ai_model=EXCLUDED.ai_model, token_count=EXCLUDED.token_count, created_at=NOW()`,
-		summary.ID, summary.MediaID, summary.Summary, summary.KeyPoints, summary.Tags, summary.Model, summary.TokenCount)
+	_, err := s.pool.Exec(ctx, `INSERT INTO summaries (id,media_id,summary,key_points,tags,ai_provider,ai_model,token_count) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (media_id) DO UPDATE SET summary=EXCLUDED.summary, key_points=EXCLUDED.key_points, tags=EXCLUDED.tags, ai_provider=EXCLUDED.ai_provider, ai_model=EXCLUDED.ai_model, token_count=EXCLUDED.token_count, created_at=NOW()`,
+		summary.ID, summary.MediaID, summary.Summary, summary.KeyPoints, summary.Tags, summary.AIProvider, summary.Model, summary.TokenCount)
 	return err
 }
 
 func (s *Store) GetSummary(ctx context.Context, mediaID string) (*Summary, error) {
 	var summary Summary
-	err := s.pool.QueryRow(ctx, `SELECT id,media_id,summary,key_points,tags,ai_model,token_count,created_at FROM summaries WHERE media_id=$1`,
-		mediaID).Scan(&summary.ID, &summary.MediaID, &summary.Summary, &summary.KeyPoints, &summary.Tags, &summary.AIProvider, &summary.TokenCount, &summary.CreatedAt)
+	err := s.pool.QueryRow(ctx, `SELECT id,media_id,summary,key_points,tags,ai_provider,ai_model,token_count,created_at FROM summaries WHERE media_id=$1`,
+		mediaID).Scan(&summary.ID, &summary.MediaID, &summary.Summary, &summary.KeyPoints, &summary.Tags, &summary.AIProvider, &summary.Model, &summary.TokenCount, &summary.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -1164,15 +1496,15 @@ func (s *Store) GetSummary(ctx context.Context, mediaID string) (*Summary, error
 }
 
 func (s *Store) UpsertClassification(ctx context.Context, cls *Classification) error {
-	_, err := s.pool.Exec(ctx, `INSERT INTO classifications (id,media_id,topic,tags,confidence,ai_model) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (media_id) DO UPDATE SET topic=EXCLUDED.topic, tags=EXCLUDED.tags, confidence=EXCLUDED.confidence, ai_model=EXCLUDED.ai_model`,
-		cls.ID, cls.MediaID, cls.Topic, cls.Tags, cls.Confidence, cls.Model)
+	_, err := s.pool.Exec(ctx, `INSERT INTO classifications (id,media_id,topic,tags,confidence,ai_provider,ai_model) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (media_id) DO UPDATE SET topic=EXCLUDED.topic, tags=EXCLUDED.tags, confidence=EXCLUDED.confidence, ai_provider=EXCLUDED.ai_provider, ai_model=EXCLUDED.ai_model`,
+		cls.ID, cls.MediaID, cls.Topic, cls.Tags, cls.Confidence, cls.AIProvider, cls.Model)
 	return err
 }
 
 func (s *Store) GetClassification(ctx context.Context, mediaID string) (*Classification, error) {
 	var cls Classification
-	err := s.pool.QueryRow(ctx, `SELECT id,media_id,topic,tags,confidence,ai_model,created_at FROM classifications WHERE media_id=$1`,
-		mediaID).Scan(&cls.ID, &cls.MediaID, &cls.Topic, &cls.Tags, &cls.Confidence, &cls.AIProvider, &cls.CreatedAt)
+	err := s.pool.QueryRow(ctx, `SELECT id,media_id,topic,tags,confidence,ai_provider,ai_model,created_at FROM classifications WHERE media_id=$1`,
+		mediaID).Scan(&cls.ID, &cls.MediaID, &cls.Topic, &cls.Tags, &cls.Confidence, &cls.AIProvider, &cls.Model, &cls.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -1366,13 +1698,13 @@ func sortSearchResults(results []SearchResult) {
 
 type Pipeline struct {
 	store      *Store
-	ai         AIProvider
+	ai         aiTaskRuntime
 	detector   *MediaDetector
 	config     *Config
 	extractors map[MediaType]ContentExtractor
 }
 
-func NewPipeline(store *Store, ai AIProvider, cfg *Config) *Pipeline {
+func NewPipeline(store *Store, ai aiTaskRuntime, cfg *Config) *Pipeline {
 	p := &Pipeline{
 		store:      store,
 		ai:         ai,
@@ -1466,14 +1798,14 @@ func (p *Pipeline) ProcessFile(ctx context.Context, path string, log *slog.Logge
 		chunkIDs[i] = chunk.ID
 	}
 
-	if len(chunkIDs) > 0 && p.ai != nil {
+	if len(chunkIDs) > 0 && p.ai.embedder != nil {
 		if err := p.generateEmbeddings(ctx, chunkIDs, chunks, log); err != nil {
 			log.Warn("embeddings failed", "err", err)
 		}
 	}
 
-	if text != "" && p.ai != nil {
-		if summary, err := p.ai.Summarize(ctx, text); err != nil {
+	if text != "" && p.ai.summarizer != nil {
+		if summary, err := p.ai.summarizer.Summarize(ctx, text); err != nil {
 			log.Warn("summarize failed", "err", err)
 		} else {
 			summary.ID = uuid.New().String()
@@ -1483,8 +1815,8 @@ func (p *Pipeline) ProcessFile(ctx context.Context, path string, log *slog.Logge
 		}
 	}
 
-	if text != "" && p.ai != nil {
-		if cls, err := p.ai.Classify(ctx, text); err != nil {
+	if text != "" && p.ai.classifier != nil {
+		if cls, err := p.ai.classifier.Classify(ctx, text); err != nil {
 			log.Warn("classify failed", "err", err)
 		} else {
 			cls.ID = uuid.New().String()
@@ -1535,8 +1867,8 @@ func (p *Pipeline) Search(ctx context.Context, query string, topK int) ([]Search
 	}
 
 	var results []SearchResult
-	if p.ai != nil {
-		embeddings, err := p.ai.Embed(ctx, []string{query})
+	if p.ai.embedder != nil {
+		embeddings, err := p.ai.embedder.Embed(ctx, []string{query})
 		if err == nil && len(embeddings) > 0 {
 			results, _ = p.store.SearchEmbeddings(ctx, embeddings[0], query, topK)
 		}
@@ -1577,14 +1909,14 @@ func (p *Pipeline) extractContent(ctx context.Context, item *MediaItem) (string,
 }
 
 func (p *Pipeline) generateEmbeddings(ctx context.Context, chunkIDs []string, chunks []string, log *slog.Logger) error {
-	if p.ai == nil {
+	if p.ai.embedder == nil {
 		return nil
 	}
 	batchSize := 10
 	for i := 0; i < len(chunks); i += batchSize {
 		end := intMin(i+batchSize, len(chunks))
 		batch, ids := chunks[i:end], chunkIDs[i:end]
-		embeddings, err := p.ai.Embed(ctx, batch)
+		embeddings, err := p.ai.embedder.Embed(ctx, batch)
 		if err != nil {
 			log.Warn("embed batch failed", "err", err)
 			continue
