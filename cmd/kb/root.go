@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,7 +14,7 @@ import (
 
 var (
 	configPath string
-	verbose   bool
+	verbose    bool
 )
 
 var (
@@ -96,39 +95,11 @@ func resolvePipeline() (*core.Pipeline, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ai core.AIProvider
-	provider := strings.ToLower(cfg.AI.Provider)
-	switch provider {
-	case "", "minimax":
-		if cfg.AI.Minimax.APIKey != "" {
-			ai = core.NewMinimaxProvider(
-				cfg.AI.Minimax.APIKey,
-				cfg.AI.Minimax.BaseURL,
-				cfg.AI.Minimax.GroupID,
-				cfg.AI.Minimax.Model,
-				cfg.AI.Minimax.EmbeddingModel,
-				cfg.AI.Minimax.EmbeddingDim,
-				cfg.AI.Minimax.MaxTokens,
-				cfg.AI.Minimax.Temperature,
-			)
-		}
-	case "codex", "codex-for.me", "codexforme":
-		if cfg.AI.Codex.APIKey != "" {
-			ai = core.NewCodexProvider(
-				cfg.AI.Codex.APIKey,
-				cfg.AI.Codex.BaseURL,
-				cfg.AI.Codex.Model,
-				cfg.AI.Codex.EmbeddingModel,
-				cfg.AI.Codex.EmbeddingDim,
-				2048,
-				0.7,
-				cfg.AI.Codex.ReasoningEffort,
-			)
-		}
-	default:
-		// Unknown provider: leave ai nil; pipeline will skip AI work.
+	aiRuntime, err := core.BuildAITaskRuntime(cfg)
+	if err != nil {
+		return nil, err
 	}
-	pipeline = core.NewPipeline(s, ai, cfg)
+	pipeline = core.NewPipeline(s, aiRuntime, cfg)
 	return pipeline, nil
 }
 

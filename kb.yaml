@@ -10,14 +10,24 @@ database:
   min_conns: 2
 
 ai:
-  provider: "minimax"  # minimax, openai, ollama, codex
+  provider: "qwen"  # qwen, minimax, codex, openai, ollama
+  tasks:
+    summarize: "qwen"
+    classify: "qwen"
+    embed: "qwen"
+  qwen:
+    api_key: "${DASHSCOPE_API_KEY}"
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model: "qwen-plus"
+    embedding_model: "text-embedding-v4"
+    embedding_dim: 1536
   minimax:
     api_key: "${MINIMAX_API_KEY}"
     base_url: "https://api.minimax.chat/v1"
     group_id: "2029883242278035714"
     model: "MiniMax-M2.7"
     embedding_model: "embo-01"
-    embedding_dim: 1024
+    embedding_dim: 1536
     max_tokens: 4096
     temperature: 1.0
     reasoning_split: false  # Enable interleaved thinking chain
