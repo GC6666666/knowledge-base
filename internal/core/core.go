@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,10 +111,10 @@ type SearchResult struct {
 
 type Config struct {
 	Database DatabaseConfig `json:"database"`
-	AI       AIConfig      `json:"ai"`
-	App      AppConfig     `json:"app"`
-	Ingest   IngestConfig  `json:"ingest"`
-	Watch    WatchConfig   `json:"watch"`
+	AI       AIConfig       `json:"ai"`
+	App      AppConfig      `json:"app"`
+	Ingest   IngestConfig   `json:"ingest"`
+	Watch    WatchConfig    `json:"watch"`
 }
 
 type DatabaseConfig struct {
@@ -127,28 +128,28 @@ type DatabaseConfig struct {
 }
 
 type AIConfig struct {
-	Provider string         `json:"provider"`
-	Minimax  MinimaxConfig  `json:"minimax,omitempty"`
-	OpenAI   OpenAIConfig   `json:"openai,omitempty"`
-	Ollama   OllamaConfig   `json:"ollama,omitempty"`
-	Codex    CodexConfig    `json:"codex,omitempty"`
+	Provider string        `json:"provider"`
+	Minimax  MinimaxConfig `json:"minimax,omitempty"`
+	OpenAI   OpenAIConfig  `json:"openai,omitempty"`
+	Ollama   OllamaConfig  `json:"ollama,omitempty"`
+	Codex    CodexConfig   `json:"codex,omitempty"`
 }
 
 type CodexConfig struct {
-	APIKey         string `json:"api_key"`
-	BaseURL        string `json:"base_url"`
-	Model          string `json:"model"`
-	EmbeddingModel string `json:"embedding_model"`
-	EmbeddingDim   int    `json:"embedding_dim"`
+	APIKey          string `json:"api_key"`
+	BaseURL         string `json:"base_url"`
+	Model           string `json:"model"`
+	EmbeddingModel  string `json:"embedding_model"`
+	EmbeddingDim    int    `json:"embedding_dim"`
 	ReasoningEffort string `json:"reasoning_effort"` // high, medium, low (for Responses API)
 }
 
 type MinimaxConfig struct {
-	APIKey          string  `json:"api_key"`
-	BaseURL          string  `json:"base_url"`  // OpenAI-compatible endpoint, e.g. https://api.minimaxi.com/v1
-	GroupID         string  `json:"group_id"`
-	Model           string  `json:"model"`  // MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.
-	EmbeddingModel  string  `json:"embedding_model"`  // embo-01
+	APIKey         string  `json:"api_key"`
+	BaseURL        string  `json:"base_url"` // OpenAI-compatible endpoint, e.g. https://api.minimaxi.com/v1
+	GroupID        string  `json:"group_id"`
+	Model          string  `json:"model"`           // MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.
+	EmbeddingModel string  `json:"embedding_model"` // embo-01
 	EmbeddingDim   int     `json:"embedding_dim"`
 	MaxTokens      int     `json:"max_tokens"`
 	Temperature    float64 `json:"temperature"`
@@ -156,11 +157,11 @@ type MinimaxConfig struct {
 }
 
 type OpenAIConfig struct {
-	APIKey          string `json:"api_key"`
-	BaseURL          string `json:"base_url"`
-	Model           string `json:"model"`
-	EmbeddingModel  string `json:"embedding_model"`
-	EmbeddingDim    int    `json:"embedding_dim"`
+	APIKey         string `json:"api_key"`
+	BaseURL        string `json:"base_url"`
+	Model          string `json:"model"`
+	EmbeddingModel string `json:"embedding_model"`
+	EmbeddingDim   int    `json:"embedding_dim"`
 }
 
 type OllamaConfig struct {
@@ -283,10 +284,10 @@ func LoadConfig(configPath string) (*Config, error) {
 		cfg.AI.Minimax.Temperature = 0.7
 	}
 	if cfg.AI.Minimax.Model == "" {
-		cfg.AI.Minimax.Model = "abab5.5-chat"
+		cfg.AI.Minimax.Model = "MiniMax-M2.7"
 	}
 	if cfg.AI.Minimax.EmbeddingModel == "" {
-		cfg.AI.Minimax.EmbeddingModel = "embo01"
+		cfg.AI.Minimax.EmbeddingModel = "embo-01"
 	}
 	if cfg.AI.Codex.BaseURL == "" {
 		cfg.AI.Codex.BaseURL = "https://api.codex-for.me/v1"
@@ -457,11 +458,11 @@ func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTo
 func (p *CodexProvider) Name() string { return p.name }
 
 type responsesCreateRequest struct {
-	Model          string `json:"model"`
-	Input          string `json:"input"`
-	MaxOutput      int    `json:"max_output_tokens,omitempty"`
-	Temp           float64 `json:"temperature,omitempty"`
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	Model           string  `json:"model"`
+	Input           string  `json:"input"`
+	MaxOutput       int     `json:"max_output_tokens,omitempty"`
+	Temp            float64 `json:"temperature,omitempty"`
+	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
 }
 
 type responsesCreateResponse struct {
@@ -481,10 +482,10 @@ type responsesCreateResponse struct {
 
 func (p *CodexProvider) createResponse(ctx context.Context, input string, maxOutput int, temp float64) (string, error) {
 	reqBody := responsesCreateRequest{
-		Model:          p.model,
-		Input:          input,
-		MaxOutput:      maxOutput,
-		Temp:           temp,
+		Model:           p.model,
+		Input:           input,
+		MaxOutput:       maxOutput,
+		Temp:            temp,
 		ReasoningEffort: p.reasoningEffort,
 	}
 	body, _ := json.Marshal(reqBody)
@@ -551,8 +552,8 @@ func (p *CodexProvider) Summarize(ctx context.Context, text string) (*Summary, e
 
 	return &Summary{
 		Summary:    result.Summary,
-		KeyPoints: result.KeyPoints,
-		Tags:      result.Tags,
+		KeyPoints:  result.KeyPoints,
+		Tags:       result.Tags,
 		AIProvider: p.name,
 		Model:      p.model,
 		TokenCount: countTokens(text),
@@ -633,11 +634,12 @@ type LLMClient interface {
 
 // ChatCompletionRequest matches go-openai's request format.
 type ChatCompletionRequest struct {
-	Model       string                    `json:"model"`
-	Messages    []map[string]string        `json:"messages"`
-	MaxTokens   int                       `json:"max_tokens,omitempty"`
-	Temperature float64                   `json:"temperature,omitempty"`
-	ExtraBody  map[string]any             `json:"extra_body,omitempty"`
+	Model          string              `json:"model"`
+	Messages       []map[string]string `json:"messages"`
+	MaxTokens      int                 `json:"max_tokens,omitempty"`
+	Temperature    float64             `json:"temperature,omitempty"`
+	ReasoningSplit bool                `json:"-"`
+	ExtraBody      map[string]any      `json:"extra_body,omitempty"`
 }
 
 // ChatCompletionResponse matches go-openai's response format.
@@ -651,12 +653,12 @@ type ChatCompletionResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
-		Index int         `json:"index"`
+		Index        int    `json:"index"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens     int `json:"total_tokens"`
+		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 	Error struct {
 		Message string `json:"message"`
@@ -690,10 +692,10 @@ type EmbeddingResponse struct {
 	Object string `json:"object"`
 	Data   []struct {
 		Object    string    `json:"object"`
-	Embedding []float32 `json:"embedding"`
-		Index    int       `json:"index"`
+		Embedding []float32 `json:"embedding"`
+		Index     int       `json:"index"`
 	} `json:"data"`
-	Model  string `json:"model"`
+	Model string `json:"model"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 	} `json:"usage"`
@@ -726,7 +728,17 @@ func (c *goOpenAIClient) CreateChatCompletion(ctx context.Context, model string,
 	if model == "" {
 		model = c.model
 	}
+	if req.Model == "" {
+		req.Model = model
+	}
 	body, _ := json.Marshal(req)
+	if req.ReasoningSplit {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err == nil {
+			payload["reasoning_split"] = true
+			body, _ = json.Marshal(payload)
+		}
+	}
 	httpReq, err := newHTTPRequest("POST", c.baseURL+"/chat/completions", body)
 	if err != nil {
 		return nil, err
@@ -813,15 +825,15 @@ func NewMinimaxProvider(apiKey, baseURL, groupID, model, embedModel string, embe
 
 	client := newGoOpenAIClient(apiKey, baseURL, model)
 	return &MinimaxProvider{
-		client:      client,
-		apiKey:      apiKey,
-		groupID:     groupID,
-		model:       model,
-		embedModel:  embedModel,
-		embedDim:    embedDim,
-		maxTokens:   maxTokens,
-		temp:        temp,
-		name:        "minimax",
+		client:     client,
+		apiKey:     apiKey,
+		groupID:    groupID,
+		model:      model,
+		embedModel: embedModel,
+		embedDim:   embedDim,
+		maxTokens:  maxTokens,
+		temp:       temp,
+		name:       "minimax",
 	}
 }
 
@@ -841,8 +853,9 @@ func (p *MinimaxProvider) Summarize(ctx context.Context, text string) (*Summary,
 			{"role": "system", "content": "You are a helpful assistant. Always respond in JSON format."},
 			{"role": "user", "content": prompt},
 		},
-		MaxTokens:   p.maxTokens,
-		Temperature: p.temp,
+		MaxTokens:      p.maxTokens,
+		Temperature:    p.temp,
+		ReasoningSplit: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minimax chat: %w", err)
@@ -868,7 +881,7 @@ func (p *MinimaxProvider) Summarize(ctx context.Context, text string) (*Summary,
 
 	return &Summary{
 		Summary:    result.Summary,
-		KeyPoints: result.KeyPoints,
+		KeyPoints:  result.KeyPoints,
 		Tags:       result.Tags,
 		AIProvider: p.name,
 		Model:      p.model,
@@ -890,8 +903,9 @@ func (p *MinimaxProvider) Classify(ctx context.Context, text string) (*Classific
 			{"role": "system", "content": "You are a classification assistant. Respond in JSON format."},
 			{"role": "user", "content": prompt},
 		},
-		MaxTokens:   256,
-		Temperature: 0.3,
+		MaxTokens:      256,
+		Temperature:    1.0,
+		ReasoningSplit: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minimax classify: %w", err)
@@ -951,8 +965,14 @@ func (p *MinimaxProvider) Embed(ctx context.Context, texts []string) ([][]float3
 		Type:  "db",
 	}
 	body, _ := json.Marshal(reqBody)
-	endpoint := strings.TrimRight(p.client.(*goOpenAIClient).baseURL, "/") + "/embeddings?GroupId=" + p.groupID
-	httpReq, err := newHTTPRequest("POST", endpoint, body)
+	endpointURL, err := url.Parse(strings.TrimRight(p.client.(*goOpenAIClient).baseURL, "/") + "/embeddings")
+	if err != nil {
+		return nil, err
+	}
+	query := endpointURL.Query()
+	query.Set("GroupId", p.groupID)
+	endpointURL.RawQuery = query.Encode()
+	httpReq, err := newHTTPRequest("POST", endpointURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1068,7 +1088,7 @@ func NewStore(ctx context.Context, dsn string, maxConns, minConns int) (*Store, 
 	return &Store{pool: pool}, nil
 }
 
-func (s *Store) Close()  { s.pool.Close() }
+func (s *Store) Close()                         { s.pool.Close() }
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
 func (s *Store) CreateMediaItem(ctx context.Context, item *MediaItem) error {
