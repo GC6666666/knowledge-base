@@ -197,7 +197,9 @@ func newWatchCmd() *cobra.Command {
 			for _, p := range watchPaths {
 				fmt.Printf("  watching: %s\n", p)
 			}
-			fmt.Println("\nCtrl+C to stop.\n")
+			fmt.Println()
+			fmt.Println("Ctrl+C to stop.")
+			fmt.Println()
 
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

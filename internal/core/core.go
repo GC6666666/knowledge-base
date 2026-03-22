@@ -131,6 +131,15 @@ type AIConfig struct {
 	Minimax  MinimaxConfig  `json:"minimax,omitempty"`
 	OpenAI   OpenAIConfig   `json:"openai,omitempty"`
 	Ollama   OllamaConfig   `json:"ollama,omitempty"`
+	Codex    CodexConfig    `json:"codex,omitempty"`
+}
+
+type CodexConfig struct {
+	APIKey         string `json:"api_key"`
+	BaseURL        string `json:"base_url"`
+	Model          string `json:"model"`
+	EmbeddingModel string `json:"embedding_model"`
+	EmbeddingDim   int    `json:"embedding_dim"`
 }
 
 type MinimaxConfig struct {
@@ -227,9 +236,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	cfg.AI.Ollama.BaseURL = v.GetString("ai.ollama.base_url")
 	cfg.AI.Ollama.Model = v.GetString("ai.ollama.model")
 	cfg.AI.Ollama.EmbeddingModel = v.GetString("ai.ollama.embedding_model")
-	cfg.AI.Ollama.BaseURL = v.GetString("ai.ollama.base_url")
-	cfg.AI.Ollama.Model = v.GetString("ai.ollama.model")
-	cfg.AI.Ollama.EmbeddingModel = v.GetString("ai.ollama.embedding_model")
+	cfg.AI.Codex.APIKey = v.GetString("ai.codex.api_key")
+	cfg.AI.Codex.BaseURL = v.GetString("ai.codex.base_url")
+	cfg.AI.Codex.Model = v.GetString("ai.codex.model")
+	cfg.AI.Codex.EmbeddingModel = v.GetString("ai.codex.embedding_model")
+	cfg.AI.Codex.EmbeddingDim = v.GetInt("ai.codex.embedding_dim")
 
 	cfg.App.Host = v.GetString("app.host")
 	cfg.App.Port = v.GetInt("app.port")
@@ -273,6 +284,18 @@ func LoadConfig(configPath string) (*Config, error) {
 	if cfg.AI.Minimax.EmbeddingModel == "" {
 		cfg.AI.Minimax.EmbeddingModel = "embo01"
 	}
+	if cfg.AI.Codex.BaseURL == "" {
+		cfg.AI.Codex.BaseURL = "https://api.codex-for.me/v1"
+	}
+	if cfg.AI.Codex.Model == "" {
+		cfg.AI.Codex.Model = "gpt-4.1-mini"
+	}
+	if cfg.AI.Codex.EmbeddingModel == "" {
+		cfg.AI.Codex.EmbeddingModel = "text-embedding-3-small"
+	}
+	if cfg.AI.Codex.EmbeddingDim == 0 {
+		cfg.AI.Codex.EmbeddingDim = 1536
+	}
 	if cfg.App.Port == 0 {
 		cfg.App.Port = 8080
 	}
@@ -301,7 +324,34 @@ func (c *Config) resolveEnv() {
 	c.Database.Name = resolveEnvOrValue(os.Getenv("KB_DB_NAME"), c.Database.Name)
 	c.AI.Provider = resolveEnvOrValue(os.Getenv("KB_AI_PROVIDER"), c.AI.Provider)
 	c.AI.Minimax.APIKey = resolveEnvOrValue(os.Getenv("MINIMAX_API_KEY"), c.AI.Minimax.APIKey)
+	c.AI.Minimax.BaseURL = resolveEnvOrValue(os.Getenv("MINIMAX_BASE_URL"), c.AI.Minimax.BaseURL)
+	c.AI.Minimax.Model = resolveEnvOrValue(os.Getenv("MINIMAX_MODEL"), c.AI.Minimax.Model)
+	c.AI.Minimax.EmbeddingModel = resolveEnvOrValue(os.Getenv("MINIMAX_EMBEDDING_MODEL"), c.AI.Minimax.EmbeddingModel)
+	if v := os.Getenv("MINIMAX_EMBEDDING_DIM"); v != "" {
+		fmt.Sscanf(v, "%d", &c.AI.Minimax.EmbeddingDim)
+	}
+	if v := os.Getenv("MINIMAX_MAX_TOKENS"); v != "" {
+		fmt.Sscanf(v, "%d", &c.AI.Minimax.MaxTokens)
+	}
+	if v := os.Getenv("MINIMAX_TEMPERATURE"); v != "" {
+		fmt.Sscanf(v, "%f", &c.AI.Minimax.Temperature)
+	}
+
 	c.AI.OpenAI.APIKey = resolveEnvOrValue(os.Getenv("OPENAI_API_KEY"), c.AI.OpenAI.APIKey)
+	c.AI.OpenAI.BaseURL = resolveEnvOrValue(os.Getenv("OPENAI_BASE_URL"), c.AI.OpenAI.BaseURL)
+	c.AI.OpenAI.Model = resolveEnvOrValue(os.Getenv("OPENAI_MODEL"), c.AI.OpenAI.Model)
+	c.AI.OpenAI.EmbeddingModel = resolveEnvOrValue(os.Getenv("OPENAI_EMBEDDING_MODEL"), c.AI.OpenAI.EmbeddingModel)
+	if v := os.Getenv("OPENAI_EMBEDDING_DIM"); v != "" {
+		fmt.Sscanf(v, "%d", &c.AI.OpenAI.EmbeddingDim)
+	}
+
+	c.AI.Codex.APIKey = resolveEnvOrValue(os.Getenv("CODEX_API_KEY"), c.AI.Codex.APIKey)
+	c.AI.Codex.BaseURL = resolveEnvOrValue(os.Getenv("CODEX_BASE_URL"), c.AI.Codex.BaseURL)
+	c.AI.Codex.Model = resolveEnvOrValue(os.Getenv("CODEX_MODEL"), c.AI.Codex.Model)
+	c.AI.Codex.EmbeddingModel = resolveEnvOrValue(os.Getenv("CODEX_EMBEDDING_MODEL"), c.AI.Codex.EmbeddingModel)
+	if v := os.Getenv("CODEX_EMBEDDING_DIM"); v != "" {
+		fmt.Sscanf(v, "%d", &c.AI.Codex.EmbeddingDim)
+	}
 	c.App.Host = resolveEnvOrValue(os.Getenv("KB_HOST"), c.App.Host)
 	if v := os.Getenv("KB_PORT"); v != "" {
 		fmt.Sscanf(v, "%d", &c.App.Port)
@@ -344,12 +394,206 @@ type AIProvider interface {
 
 type MinimaxProvider struct {
 	client     LLMClient
-	model     string
+	model      string
 	embedModel string
-	embedDim  int
-	maxTokens int
-	temp      float64
-	name      string
+	embedDim   int
+	maxTokens  int
+	temp       float64
+	name       string
+}
+
+type CodexProvider struct {
+	client         *goOpenAIClient
+	model          string
+	embedModel     string
+	embedDim       int
+	maxTokens      int
+	temp           float64
+	name           string
+	extraBodyModel string
+}
+
+func NewCodexProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64) *CodexProvider {
+	if baseURL == "" {
+		baseURL = "https://api.codex-for.me/v1"
+	}
+	if model == "" {
+		model = "gpt-4.1-mini"
+	}
+	if embedModel == "" {
+		embedModel = "text-embedding-3-small"
+	}
+	if embedDim == 0 {
+		embedDim = 1536
+	}
+	if maxTokens == 0 {
+		maxTokens = 2048
+	}
+	if temp == 0 {
+		temp = 0.7
+	}
+
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	client := newGoOpenAIClient(apiKey, baseURL, model).WithHTTPClient(httpClient)
+	return &CodexProvider{
+		client:     client,
+		model:      model,
+		embedModel: embedModel,
+		embedDim:   embedDim,
+		maxTokens:  maxTokens,
+		temp:       temp,
+		name:       "codex",
+	}
+}
+
+func (p *CodexProvider) Name() string { return p.name }
+
+type responsesCreateRequest struct {
+	Model     string `json:"model"`
+	Input     string `json:"input"`
+	MaxOutput int    `json:"max_output_tokens,omitempty"`
+	Temp      float64 `json:"temperature,omitempty"`
+	// Some OpenAI-compatible gateways route actual model via extra_body.model
+	ExtraBody map[string]any `json:"extra_body,omitempty"`
+}
+
+type responsesCreateResponse struct {
+	OutputText string `json:"output_text"`
+	Error      *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
+}
+
+func (p *CodexProvider) createResponse(ctx context.Context, input string, maxOutput int, temp float64) (string, error) {
+	reqBody := responsesCreateRequest{
+		Model:     p.model,
+		Input:     input,
+		MaxOutput: maxOutput,
+		Temp:      temp,
+	}
+	if p.extraBodyModel != "" {
+		reqBody.ExtraBody = map[string]any{"model": p.extraBodyModel}
+	}
+	body, _ := json.Marshal(reqBody)
+
+	httpReq, err := newHTTPRequest("POST", p.client.baseURL+"/responses", body)
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.client.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := doRequestWithClient[responsesCreateResponse](ctx, p.client.httpClient, httpReq)
+	if err != nil {
+		return "", fmt.Errorf("codex responses: %w", err)
+	}
+	if resp.Error != nil && resp.Error.Message != "" {
+		return "", fmt.Errorf("codex responses error: %s", resp.Error.Message)
+	}
+	if strings.TrimSpace(resp.OutputText) == "" {
+		return "", fmt.Errorf("codex responses: empty output_text")
+	}
+	return resp.OutputText, nil
+}
+
+func (p *CodexProvider) Summarize(ctx context.Context, text string) (*Summary, error) {
+	if countTokens(text) > 3500 {
+		runes := []rune(text)
+		text = string(runes[:intMin(len(runes), 12000)])
+	}
+	prompt := strings.Replace(summarizationPrompt, "{{.Content}}", text, 1)
+	out, err := p.createResponse(ctx, prompt, p.maxTokens, p.temp)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Summary   string   `json:"summary"`
+		KeyPoints []string `json:"key_points"`
+		Tags      []string `json:"tags"`
+	}
+	jsonText, err := parseJSONResponse(out)
+	if err != nil {
+		result.Summary = out
+	} else if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+
+	return &Summary{
+		Summary:    result.Summary,
+		KeyPoints: result.KeyPoints,
+		Tags:      result.Tags,
+		AIProvider: p.name,
+		Model:      p.model,
+		TokenCount: countTokens(text),
+	}, nil
+}
+
+func (p *CodexProvider) Classify(ctx context.Context, text string) (*Classification, error) {
+	if len(text) > 2000 {
+		runes := []rune(text)
+		text = string(runes[:2000])
+	}
+	prompt := strings.Replace(classificationPrompt, "{{.Content}}", text, 1)
+	out, err := p.createResponse(ctx, prompt, 512, 0.3)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Topic      string   `json:"topic"`
+		Tags       []string `json:"tags"`
+		Confidence float64  `json:"confidence"`
+	}
+	jsonText, err := parseJSONResponse(out)
+	if err != nil {
+		result.Topic = "未分类"
+		result.Tags = []string{}
+		result.Confidence = 0
+	} else if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+	if result.Confidence == 0 && result.Topic != "" {
+		result.Confidence = 0.8
+	}
+	return &Classification{
+		Topic:      result.Topic,
+		Tags:       result.Tags,
+		Confidence: result.Confidence,
+		AIProvider: p.name,
+		Model:      p.model,
+	}, nil
+}
+
+func (p *CodexProvider) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if len(texts) == 0 {
+		return nil, nil
+	}
+	truncated := make([]string, len(texts))
+	for i, t := range texts {
+		if countTokens(t) > 2000 {
+			runes := []rune(t)
+			truncated[i] = string(runes[:intMin(len(runes), 8000)])
+		} else {
+			truncated[i] = t
+		}
+	}
+	resp, err := p.client.CreateEmbeddings(ctx, EmbeddingRequest{
+		Input: truncated,
+		Model: p.embedModel,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("codex embed: %w", err)
+	}
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("no embeddings returned")
+	}
+	result := make([][]float32, len(resp.Data))
+	for i, d := range resp.Data {
+		result[i] = d.Embedding
+	}
+	return result, nil
 }
 
 // OpenAIClient is an interface over the go-openai client to allow for easy swapping.
@@ -415,14 +659,23 @@ type EmbeddingResponse struct {
 }
 
 type goOpenAIClient struct {
-	apiKey  string
-	baseURL string
-	model  string
-	httpClient any
+	apiKey     string
+	baseURL    string
+	model      string
+	httpClient *http.Client
 }
 
 func newGoOpenAIClient(apiKey, baseURL, model string) *goOpenAIClient {
-	return &goOpenAIClient{apiKey: apiKey, baseURL: baseURL, model: model}
+	return &goOpenAIClient{apiKey: apiKey, baseURL: baseURL, model: model, httpClient: http.DefaultClient}
+}
+
+func (c *goOpenAIClient) WithHTTPClient(httpClient *http.Client) *goOpenAIClient {
+	if httpClient == nil {
+		return c
+	}
+	cpy := *c
+	cpy.httpClient = httpClient
+	return &cpy
 }
 
 func (c *goOpenAIClient) CreateChatCompletion(ctx context.Context, model string, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
@@ -436,7 +689,11 @@ func (c *goOpenAIClient) CreateChatCompletion(ctx context.Context, model string,
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
-	return doRequest[ChatCompletionResponse](ctx, httpReq)
+	httpClient := c.httpClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return doRequestWithClient[ChatCompletionResponse](ctx, httpClient, httpReq)
 }
 
 func (c *goOpenAIClient) CreateEmbeddings(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
@@ -447,7 +704,11 @@ func (c *goOpenAIClient) CreateEmbeddings(ctx context.Context, req EmbeddingRequ
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
-	return doRequest[EmbeddingResponse](ctx, httpReq)
+	httpClient := c.httpClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return doRequestWithClient[EmbeddingResponse](ctx, httpClient, httpReq)
 }
 
 func newHTTPRequest(method, url string, body []byte) (*http.Request, error) {
@@ -455,11 +716,15 @@ func newHTTPRequest(method, url string, body []byte) (*http.Request, error) {
 }
 
 func doRequest[T any](ctx context.Context, req *http.Request) (*T, error) {
+	return doRequestWithClient[T](ctx, http.DefaultClient, req)
+}
+
+func doRequestWithClient[T any](ctx context.Context, client *http.Client, req *http.Request) (*T, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	req = req.WithContext(ctx)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

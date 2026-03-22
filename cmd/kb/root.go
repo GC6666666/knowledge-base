@@ -98,7 +98,8 @@ func resolvePipeline() (*core.Pipeline, error) {
 	}
 	var ai core.AIProvider
 	provider := strings.ToLower(cfg.AI.Provider)
-	if provider == "" || provider == "minimax" {
+	switch provider {
+	case "", "minimax":
 		if cfg.AI.Minimax.APIKey != "" {
 			ai = core.NewMinimaxProvider(
 				cfg.AI.Minimax.APIKey,
@@ -110,6 +111,20 @@ func resolvePipeline() (*core.Pipeline, error) {
 				cfg.AI.Minimax.Temperature,
 			)
 		}
+	case "codex", "codex-for.me", "codexforme":
+		if cfg.AI.Codex.APIKey != "" {
+			ai = core.NewCodexProvider(
+				cfg.AI.Codex.APIKey,
+				cfg.AI.Codex.BaseURL,
+				cfg.AI.Codex.Model,
+				cfg.AI.Codex.EmbeddingModel,
+				cfg.AI.Codex.EmbeddingDim,
+				2048,
+				0.7,
+			)
+		}
+	default:
+		// Unknown provider: leave ai nil; pipeline will skip AI work.
 	}
 	pipeline = core.NewPipeline(s, ai, cfg)
 	return pipeline, nil
