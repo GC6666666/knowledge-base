@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS classifications (
     tags        TEXT[],
     confidence  FLOAT,
     ai_model    TEXT,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(media_id)
 );
 
 -- Text chunks for embedding
