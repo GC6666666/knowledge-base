@@ -104,6 +104,7 @@ func resolvePipeline() (*core.Pipeline, error) {
 			ai = core.NewMinimaxProvider(
 				cfg.AI.Minimax.APIKey,
 				cfg.AI.Minimax.BaseURL,
+				cfg.AI.Minimax.GroupID,
 				cfg.AI.Minimax.Model,
 				cfg.AI.Minimax.EmbeddingModel,
 				cfg.AI.Minimax.EmbeddingDim,

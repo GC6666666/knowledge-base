@@ -13,10 +13,11 @@ ai:
   provider: "minimax"  # minimax, openai, ollama, codex
   minimax:
     api_key: "${MINIMAX_API_KEY}"
-    base_url: "https://api.minimaxi.com/v1"  # OpenAI-compatible endpoint
-    model: "MiniMax-M2.7"  # Chat model (MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.)
-    embedding_model: "text-embedding-3-small"  # For embedding, use openai model or set to "" to skip
-    embedding_dim: 1536
+    base_url: "https://api.minimax.chat/v1"
+    group_id: "2029883242278035714"
+    model: "MiniMax-M2.7"
+    embedding_model: "embo-01"
+    embedding_dim: 1024
     max_tokens: 4096
     temperature: 1.0
     reasoning_split: false  # Enable interleaved thinking chain

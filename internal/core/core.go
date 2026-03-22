@@ -146,8 +146,9 @@ type CodexConfig struct {
 type MinimaxConfig struct {
 	APIKey          string  `json:"api_key"`
 	BaseURL          string  `json:"base_url"`  // OpenAI-compatible endpoint, e.g. https://api.minimaxi.com/v1
+	GroupID         string  `json:"group_id"`
 	Model           string  `json:"model"`  // MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.
-	EmbeddingModel  string  `json:"embedding_model"`  // text-embedding-3-small or "" to skip
+	EmbeddingModel  string  `json:"embedding_model"`  // embo-01
 	EmbeddingDim   int     `json:"embedding_dim"`
 	MaxTokens      int     `json:"max_tokens"`
 	Temperature    float64 `json:"temperature"`
@@ -223,6 +224,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	cfg.AI.Provider = v.GetString("ai.provider")
 	cfg.AI.Minimax.APIKey = v.GetString("ai.minimax.api_key")
 	cfg.AI.Minimax.BaseURL = v.GetString("ai.minimax.base_url")
+	cfg.AI.Minimax.GroupID = v.GetString("ai.minimax.group_id")
 	cfg.AI.Minimax.Model = v.GetString("ai.minimax.model")
 	cfg.AI.Minimax.EmbeddingModel = v.GetString("ai.minimax.embedding_model")
 	cfg.AI.Minimax.EmbeddingDim = v.GetInt("ai.minimax.embedding_dim")
@@ -327,6 +329,7 @@ func (c *Config) resolveEnv() {
 	c.AI.Provider = resolveEnvOrValue(os.Getenv("KB_AI_PROVIDER"), c.AI.Provider)
 	c.AI.Minimax.APIKey = resolveEnvOrValue(os.Getenv("MINIMAX_API_KEY"), c.AI.Minimax.APIKey)
 	c.AI.Minimax.BaseURL = resolveEnvOrValue(os.Getenv("MINIMAX_BASE_URL"), c.AI.Minimax.BaseURL)
+	c.AI.Minimax.GroupID = resolveEnvOrValue(os.Getenv("MINIMAX_GROUP_ID"), c.AI.Minimax.GroupID)
 	c.AI.Minimax.Model = resolveEnvOrValue(os.Getenv("MINIMAX_MODEL"), c.AI.Minimax.Model)
 	c.AI.Minimax.EmbeddingModel = resolveEnvOrValue(os.Getenv("MINIMAX_EMBEDDING_MODEL"), c.AI.Minimax.EmbeddingModel)
 	if v := os.Getenv("MINIMAX_EMBEDDING_DIM"); v != "" {
@@ -396,6 +399,8 @@ type AIProvider interface {
 
 type MinimaxProvider struct {
 	client     LLMClient
+	apiKey     string
+	groupID    string
 	model      string
 	embedModel string
 	embedDim   int
@@ -659,6 +664,21 @@ type ChatCompletionResponse struct {
 	} `json:"error,omitempty"`
 }
 
+type MinimaxEmbeddingRequest struct {
+	Texts []string `json:"texts"`
+	Model string   `json:"model"`
+	Type  string   `json:"type"`
+}
+
+type MinimaxEmbeddingResponse struct {
+	Vectors     [][]float32 `json:"vectors"`
+	TotalTokens int64       `json:"total_tokens"`
+	BaseResp    struct {
+		StatusCode int64  `json:"status_code"`
+		StatusMsg  string `json:"status_msg"`
+	} `json:"base_resp"`
+}
+
 // EmbeddingRequest matches go-openai's request format.
 type EmbeddingRequest struct {
 	Input any    `json:"input"`
@@ -774,7 +794,7 @@ func doRequestWithClient[T any](ctx context.Context, client *http.Client, req *h
 	return &result, nil
 }
 
-func NewMinimaxProvider(apiKey, baseURL, model, embedModel string, embedDim, maxTokens int, temp float64) *MinimaxProvider {
+func NewMinimaxProvider(apiKey, baseURL, groupID, model, embedModel string, embedDim, maxTokens int, temp float64) *MinimaxProvider {
 	if model == "" {
 		model = "MiniMax-M2.7"
 	}
@@ -788,18 +808,20 @@ func NewMinimaxProvider(apiKey, baseURL, model, embedModel string, embedDim, max
 		temp = 1.0
 	}
 	if embedModel == "" {
-		embedModel = "text-embedding-3-small"
+		embedModel = "embo-01"
 	}
 
 	client := newGoOpenAIClient(apiKey, baseURL, model)
 	return &MinimaxProvider{
-		client:     client,
-		model:      model,
-		embedModel: embedModel,
-		embedDim:   embedDim,
+		client:      client,
+		apiKey:      apiKey,
+		groupID:     groupID,
+		model:       model,
+		embedModel:  embedModel,
+		embedDim:    embedDim,
 		maxTokens:   maxTokens,
-		temp:       temp,
-		name:       "minimax",
+		temp:        temp,
+		name:        "minimax",
 	}
 }
 
@@ -912,28 +934,42 @@ func (p *MinimaxProvider) Embed(ctx context.Context, texts []string) ([][]float3
 	}
 	truncated := make([]string, len(texts))
 	for i, t := range texts {
-		if countTokens(t) > 2000 {
+		if countTokens(t) > 4000 {
 			runes := []rune(t)
-			truncated[i] = string(runes[:intMin(len(runes), 8000)])
+			truncated[i] = string(runes[:intMin(len(runes), 16000)])
 		} else {
 			truncated[i] = t
 		}
 	}
-	resp, err := p.client.CreateEmbeddings(ctx, EmbeddingRequest{
-		Input: truncated,
+	if p.groupID == "" {
+		return nil, fmt.Errorf("minimax embed: missing group_id")
+	}
+
+	reqBody := MinimaxEmbeddingRequest{
+		Texts: truncated,
 		Model: p.embedModel,
-	})
+		Type:  "db",
+	}
+	body, _ := json.Marshal(reqBody)
+	endpoint := strings.TrimRight(p.client.(*goOpenAIClient).baseURL, "/") + "/embeddings?GroupId=" + p.groupID
+	httpReq, err := newHTTPRequest("POST", endpoint, body)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := doRequestWithClient[MinimaxEmbeddingResponse](ctx, p.client.(*goOpenAIClient).httpClient, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("minimax embed: %w", err)
 	}
-	if len(resp.Data) == 0 {
+	if resp.BaseResp.StatusCode != 0 {
+		return nil, fmt.Errorf("minimax embed: %s (%d)", resp.BaseResp.StatusMsg, resp.BaseResp.StatusCode)
+	}
+	if len(resp.Vectors) == 0 {
 		return nil, fmt.Errorf("no embeddings returned")
 	}
-	result := make([][]float32, len(resp.Data))
-	for i, d := range resp.Data {
-		result[i] = d.Embedding
-	}
-	return result, nil
+	return resp.Vectors, nil
 }
 
 const summarizationPrompt = `你是一个知识助手。请对以下内容进行总结：

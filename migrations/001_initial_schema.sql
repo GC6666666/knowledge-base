@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS text_chunks (
 CREATE TABLE IF NOT EXISTS embeddings (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chunk_id    UUID NOT NULL REFERENCES text_chunks(id) ON DELETE CASCADE,
-    embedding   VECTOR(1024),  -- Embo01 dimension
+    embedding   VECTOR(1536),  -- MiniMax embo-01 dimension
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
