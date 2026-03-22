@@ -23,7 +23,6 @@ func newIngestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-		fmt.Fprintf(os.Stderr, "[DEBUG] Config: %+v\n", cfg)
 			var processed, skipped, failed int
 			for _, path := range args {
 				info, err := os.Stat(path)
