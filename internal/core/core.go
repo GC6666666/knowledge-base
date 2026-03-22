@@ -736,7 +736,12 @@ func (c *goOpenAIClient) CreateEmbeddings(ctx context.Context, req EmbeddingRequ
 }
 
 func newHTTPRequest(method, url string, body []byte) (*http.Request, error) {
-	return http.NewRequest(method, url, bytes.NewReader(body))
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	return req, nil
 }
 
 func doRequest[T any](ctx context.Context, req *http.Request) (*T, error) {
