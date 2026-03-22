@@ -1,0 +1,26 @@
+# Knowledge Base Server
+
+version: "3.8"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: kb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: knowledgebase
+      POSTGRES_USER: kbuser
+      POSTGRES_PASSWORD: kbpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kbuser -d knowledgebase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

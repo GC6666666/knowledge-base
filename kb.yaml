@@ -1,0 +1,58 @@
+# Knowledge Base Configuration
+
+database:
+  host: "localhost"
+  port: 5433
+  user: "kbuser"
+  password: "kbpass"
+  name: "knowledgebase"
+  max_conns: 10
+  min_conns: 2
+
+ai:
+  provider: "minimax"  # minimax, openai, ollama
+  minimax:
+    api_key: "sk-cp-II2Ip-w8r4X0rvoGjn1Ej00MvK2hjZ9MS-OidI-sot0f1YM0r55Li2AZa21jb6PeZ6exhR9uuRknG0EifZME_EnUFw2mQ_RUMEhM86mgSRk-yXLkQAmakBY"
+    base_url: "https://api.minimaxi.com/v1"  # OpenAI-compatible endpoint
+    model: "MiniMax-M2.7"  # Chat model (MiniMax-M2.7, MiniMax-M2-her, MiniMax-M2.5, etc.)
+    embedding_model: "text-embedding-3-small"  # For embedding, use openai model or set to "" to skip
+    embedding_dim: 1536
+    max_tokens: 4096
+    temperature: 1.0
+    reasoning_split: false  # Enable interleaved thinking chain
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4o"
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3"
+    embedding_model: "nomic-embed-text"
+
+app:
+  host: "0.0.0.0"
+  port: 8088
+  data_dir: "./kb-data"
+  log_level: "info"
+
+ingest:
+  chunk_size: 512
+  chunk_overlap: 64
+  max_file_size: 100MB
+  supported_types:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".gif"
+    - ".webp"
+    - ".bmp"
+    - ".txt"
+    - ".md"
+    - ".markdown"
+    - ".pdf"
+    - ".doc"
+    - ".docx"
+
+watch:
+  enabled: false
+  paths: []
+  debounce: 5s
