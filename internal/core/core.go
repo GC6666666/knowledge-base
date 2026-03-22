@@ -459,7 +459,14 @@ type responsesCreateRequest struct {
 
 type responsesCreateResponse struct {
 	OutputText string `json:"output_text"`
-	Error      *struct {
+	Output     []struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"output"`
+	Error *struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
 	} `json:"error,omitempty"`
@@ -491,10 +498,27 @@ func (p *CodexProvider) createResponse(ctx context.Context, input string, maxOut
 	if resp.Error != nil && resp.Error.Message != "" {
 		return "", fmt.Errorf("codex responses error: %s", resp.Error.Message)
 	}
-	if strings.TrimSpace(resp.OutputText) == "" {
-		return "", fmt.Errorf("codex responses: empty output_text")
+	if strings.TrimSpace(resp.OutputText) != "" {
+		return resp.OutputText, nil
 	}
-	return resp.OutputText, nil
+	if len(resp.Output) == 0 {
+		return "", fmt.Errorf("codex responses: empty output")
+	}
+	var b strings.Builder
+	for _, o := range resp.Output {
+		for _, c := range o.Content {
+			if c.Type == "output_text" || c.Type == "text" {
+				if c.Text != "" {
+					b.WriteString(c.Text)
+				}
+			}
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		return "", fmt.Errorf("codex responses: empty output text")
+	}
+	return out, nil
 }
 
 func (p *CodexProvider) Summarize(ctx context.Context, text string) (*Summary, error) {
@@ -729,6 +753,15 @@ func doRequestWithClient[T any](ctx context.Context, client *http.Client, req *h
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if len(b) == 0 {
+			return nil, fmt.Errorf("http %s: %s", req.URL.String(), resp.Status)
+		}
+		return nil, fmt.Errorf("http %s: %s: %s", req.URL.String(), resp.Status, strings.TrimSpace(string(b)))
+	}
+
 	var result T
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
